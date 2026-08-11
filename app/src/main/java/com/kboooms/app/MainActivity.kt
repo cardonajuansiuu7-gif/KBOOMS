@@ -1,4 +1,5 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.kboooms.app
 
 import android.net.Uri
@@ -490,4 +491,140 @@ fun UploadScreen(
             OutlinedTextField(
                 value = caption,
                 onValueChange = { caption = it },
-                placeholder = { Text("Escribe una nota pa
+                placeholder = { Text("Escribe una nota para la foto (opcional)") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Surface1,
+                    unfocusedContainerColor = Surface1,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = Magenta,
+                    unfocusedBorderColor = Surface2
+                ),
+                shape = RoundedCornerShape(14.dp)
+            )
+
+            Spacer(Modifier.height(16.dp))
+            Text("¿Con quién compartir?", color = Color.White, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+
+            if (otherUsers.isEmpty()) {
+                Text("Nadie más está registrado todavía", color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+            } else {
+                LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 220.dp)) {
+                    items(otherUsers, key = { it.uid }) { u ->
+                        val checked = selectedViewers[u.uid] == true
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedViewers[u.uid] = !checked }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = { selectedViewers[u.uid] = it },
+                                colors = CheckboxDefaults.colors(checkedColor = Magenta)
+                            )
+                            Text(u.name, color = Color.White)
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Si no eliges a nadie, la foto será visible para todos",
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 12.sp
+            )
+
+            errorMsg?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, color = Color(0xFFFF6B6B), fontSize = 13.sp)
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    val uri = selectedImage
+                    if (uri == null) {
+                        errorMsg = "Elige una foto primero"
+                        return@Button
+                    }
+                    uploading = true
+                    errorMsg = null
+                    uploadToCloudinary(activity, uri) { url ->
+                        if (url == null) {
+                            uploading = false
+                            errorMsg = "Error al subir la imagen. Intenta de nuevo"
+                        } else {
+                            val viewers = selectedViewers.filterValues { it }.keys.toList()
+                            val photo = KPhoto(
+                                id = UUID.randomUUID().toString(),
+                                imageUrl = url,
+                                uploaderUid = myUid,
+                                uploaderName = myName,
+                                allowedViewers = viewers,
+                                timestamp = System.currentTimeMillis(),
+                                caption = caption
+                            )
+                            db.collection("photos").document(photo.id).set(photo)
+                                .addOnCompleteListener {
+                                    uploading = false
+                                    onDone()
+                                }
+                        }
+                    }
+                },
+                enabled = selectedImage != null && !uploading,
+                colors = ButtonDefaults.buttonColors(containerColor = Orange),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (uploading) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                } else {
+                    Text("Subir foto", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+fun uploadToCloudinary(activity: ComponentActivity, uri: Uri, onResult: (String?) -> Unit) {
+    Thread {
+        try {
+            val inputStream = activity.contentResolver.openInputStream(uri)
+            val tempFile = File.createTempFile("upload", ".jpg", activity.cacheDir)
+            val outputStream = FileOutputStream(tempFile)
+            inputStream?.copyTo(outputStream)
+            inputStream?.close()
+            outputStream.close()
+
+            val client = OkHttpClient()
+            val requestBody = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("file", tempFile.name, tempFile.asRequestBody("image/*".toMediaType()))
+                .addFormDataPart("upload_preset", CLOUDINARY_UPLOAD_PRESET)
+                .build()
+
+            val request = Request.Builder()
+                .url("https://api.cloudinary.com/v1_1/$CLOUDINARY_CLOUD_NAME/image/upload")
+                .post(requestBody)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string()
+                if (response.isSuccessful && body != null) {
+                    val json = JSONObject(body)
+                    val url = json.getString("secure_url")
+                    Handler(Looper.getMainLooper()).post { onResult(url) }
+                } else {
+                    Handler(Looper.getMainLooper()).post { onResult(null) }
+                }
+            }
+        } catch (e: Exception) {
+            Handler(Looper.getMainLooper()).post { onResult(null) }
+        }
+    }.start()
+}
