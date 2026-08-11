@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "262536731790",
+    "project_id": "kbooms",
+    "storage_bucket": "kbooms.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:262536731790:android:d24c92e42b834c5fd47ddf",
+        "android_client_info": {
+          "package_name": "com.kboooms.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDqusSv_3cMq72Tf1K7KbKhbx6aebmiarU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
